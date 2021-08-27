@@ -11,3 +11,5 @@ mongodb = { version = "2.0.0-beta.3", default-features = false, features = ["tok
 rss = "1.0"
 reqwest = "0.11"
 anyhow = "1.0"
+futures = "0.3"
+md5 = "0.7.0"

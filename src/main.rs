@@ -1,6 +1,8 @@
+use futures::stream::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::{options::ClientOptions, Client};
 use rss::Channel;
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tokio::main]
@@ -9,44 +11,92 @@ pub async fn main() -> Result<(), anyhow::Error> {
 
     let client = Client::with_options(opts)?;
     let db = client.database("headlines");
-    let collection = db.collection::<Document>("headline_versions");
+    let headline_versions = db.collection::<Document>("headline_versions");
+    let feeds = db.collection::<Document>("feeds");
 
-    let channel = read_feed().await?;
+    let mut feeds_cursor = feeds.find(doc! {}, None).await?;
 
-    for item in channel.items().iter() {
-        let title = item.title().unwrap();
-        let id = &item.guid().unwrap().value;
-        let link = item.link().unwrap();
+    while let Some(feed) = feeds_cursor.try_next().await? {
+        let feed_url = feed.get_str("rss").unwrap();
+        println!("PARSE FEED {}", feed_url);
 
-        let filter = doc! { "_id": id };
-        let mut cursor = collection.find_one(filter, None).await?;
+        let channel = read_feed(feed_url).await?;
+        let mut items_by_id: HashMap<String, Document> = HashMap::new();
 
-        println!("+ {}", title);
+        let ids: Vec<&String> = channel
+            .items()
+            .iter()
+            .map(|item| &item.guid().unwrap().value)
+            .collect();
 
-        let doc_title = doc! {
-            "title": title,
-            "changed": get_unix_seconds()
-        };
+        let filter_ids = doc! { "_id": { "$in": [ids] } };
 
-        let doc_item = doc! {
-            "_id": id,
-            "titles": [doc_title],
-            "feed": "tagesschau.de",
-            "created":  get_unix_seconds(),
-            "link": link
-        };
+        let mut cursor = headline_versions.find(filter_ids, None).await?;
+        while let Some(item) = cursor.try_next().await? {
+            items_by_id.insert(item.get_str("_id").unwrap().to_string(), item);
+        }
 
-        collection.insert_one(doc_item, None).await?;
+        for item in channel.items().iter() {
+            let title = item.title().unwrap();
+            let id = &item.guid().unwrap().value;
+            let link = item.link().unwrap();
+
+            let doc_title = doc! {
+                "title": title,
+                "changed": get_unix_seconds()
+            };
+
+            let digest = md5::compute(title);
+            let md5_title = format!("{:x}", digest);
+
+            if items_by_id.contains_key(id) {
+                let stored_title_md5 = items_by_id
+                    .get(id)
+                    .unwrap()
+                    .get_str("latest_title_hash")
+                    .unwrap();
+
+                let update_query = doc! { "_id": id };
+
+                if md5_title != stored_title_md5 {
+                    let update = doc! {
+                        "$set": {
+                            "link": link,
+                            "latest_title_hash": md5_title,
+                            "title_changed": true
+                        },
+                        "$push": {
+                            "titles": doc_title
+                        }
+                    };
+
+                    println!("~ {}", title);
+                    headline_versions
+                        .update_one(update_query, update, None)
+                        .await?;
+                }
+            } else {
+                let doc_item = doc! {
+                    "_id": id,
+                    "titles": [doc_title],
+                    "latest_title_hash": md5_title,
+                    "feed": "tagesschau.de",
+                    "created":  get_unix_seconds(),
+                    "title_changed": false,
+                    "link": link
+                };
+
+                println!("+ {}", title);
+                headline_versions.insert_one(doc_item, None).await?;
+            }
+        }
     }
 
     return Ok(());
 }
 
-async fn read_feed() -> Result<Channel, anyhow::Error> {
-    let content = reqwest::get("https://www.tagesschau.de/xml/rss2/")
-        .await?
-        .bytes()
-        .await?;
+async fn read_feed(feed_url: &str) -> Result<Channel, anyhow::Error> {
+    let content = reqwest::get(feed_url).await?.bytes().await?;
 
     let channel = Channel::read_from(&content[..])?;
     Ok(channel)
