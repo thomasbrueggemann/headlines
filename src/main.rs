@@ -18,7 +18,7 @@ pub async fn main() -> Result<(), anyhow::Error> {
 
     while let Some(feed) = feeds_cursor.try_next().await? {
         let feed_url = feed.get_str("rss").unwrap();
-        println!("PARSE FEED {}", feed_url);
+        println!("# PARSE FEED {}", feed_url);
 
         let channel = read_feed(feed_url).await?;
         let mut items_by_id: HashMap<String, Document> = HashMap::new();
@@ -26,10 +26,11 @@ pub async fn main() -> Result<(), anyhow::Error> {
         let ids: Vec<&String> = channel
             .items()
             .iter()
+            .filter(|item| item.guid().is_some())
             .map(|item| &item.guid().unwrap().value)
             .collect();
 
-        let filter_ids = doc! { "_id": { "$in": [ids] } };
+        let filter_ids = doc! { "_id": { "$in": ids } };
 
         let mut cursor = headline_versions.find(filter_ids, None).await?;
         while let Some(item) = cursor.try_next().await? {
@@ -37,8 +38,11 @@ pub async fn main() -> Result<(), anyhow::Error> {
         }
 
         for item in channel.items().iter() {
+            if item.title().is_none() || item.link().is_none() {
+                continue;
+            }
+
             let title = item.title().unwrap();
-            let id = &item.guid().unwrap().value;
             let link = item.link().unwrap();
 
             let doc_title = doc! {
@@ -49,19 +53,18 @@ pub async fn main() -> Result<(), anyhow::Error> {
             let digest = md5::compute(title);
             let md5_title = format!("{:x}", digest);
 
-            if items_by_id.contains_key(id) {
+            if items_by_id.contains_key(link) {
                 let stored_title_md5 = items_by_id
-                    .get(id)
+                    .get(link)
                     .unwrap()
                     .get_str("latest_title_hash")
                     .unwrap();
 
-                let update_query = doc! { "_id": id };
+                let update_query = doc! { "_id": link };
 
                 if md5_title != stored_title_md5 {
                     let update = doc! {
                         "$set": {
-                            "link": link,
                             "latest_title_hash": md5_title,
                             "title_changed": true
                         },
@@ -77,13 +80,12 @@ pub async fn main() -> Result<(), anyhow::Error> {
                 }
             } else {
                 let doc_item = doc! {
-                    "_id": id,
+                    "_id": link,
                     "titles": [doc_title],
                     "latest_title_hash": md5_title,
                     "feed": "tagesschau.de",
                     "created":  get_unix_seconds(),
-                    "title_changed": false,
-                    "link": link
+                    "title_changed": false
                 };
 
                 println!("+ {}", title);
