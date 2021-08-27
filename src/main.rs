@@ -5,10 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tokio::main]
 pub async fn main() -> Result<(), anyhow::Error> {
-    let client_options =
-        ClientOptions::parse("mongodb://headlines:senildeah@localhost:27017").await?;
+    let opts = ClientOptions::parse("mongodb://headlines:senildeah@localhost:27017").await?;
 
-    let client = Client::with_options(client_options)?;
+    let client = Client::with_options(opts)?;
     let db = client.database("headlines");
     let collection = db.collection::<Document>("headline_versions");
 
@@ -17,8 +16,12 @@ pub async fn main() -> Result<(), anyhow::Error> {
     for item in channel.items().iter() {
         let title = item.title().unwrap();
         let id = &item.guid().unwrap().value;
+        let link = item.link().unwrap();
 
-        println!("{}", title);
+        let filter = doc! { "_id": id };
+        let mut cursor = collection.find_one(filter, None).await?;
+
+        println!("+ {}", title);
 
         let doc_title = doc! {
             "title": title,
@@ -29,7 +32,8 @@ pub async fn main() -> Result<(), anyhow::Error> {
             "_id": id,
             "titles": [doc_title],
             "feed": "tagesschau.de",
-            "created":  get_unix_seconds()
+            "created":  get_unix_seconds(),
+            "link": link
         };
 
         collection.insert_one(doc_item, None).await?;
