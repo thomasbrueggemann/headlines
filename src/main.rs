@@ -23,39 +23,45 @@ pub async fn main() -> Result<(), anyhow::Error> {
         let channel = read_feed(feed_url).await?;
         let mut items_by_id: HashMap<String, Document> = HashMap::new();
 
-        let ids: Vec<&String> = channel
+        let ids: Vec<String> = channel
             .items()
             .iter()
             .filter(|item| item.guid().is_some())
             .map(|item| &item.guid().unwrap().value)
+            .map(|guid| format!("{:x}", md5::compute(guid)))
             .collect();
 
-        let filter_ids = doc! { "_id": { "$in": ids } };
+        let filter_ids = doc! { "_id": { "$in": &ids } };
+        println!("ids {}", ids.len());
 
-        let mut cursor = headline_versions.find(filter_ids, None).await?;
-        while let Some(item) = cursor.try_next().await? {
+        let mut headline_versions_cursor = headline_versions.find(filter_ids, None).await?;
+        while let Some(item) = headline_versions_cursor.try_next().await? {
             items_by_id.insert(item.get_str("_id").unwrap().to_string(), item);
         }
 
+        println!("ietms by id {}", items_by_id.len());
+
         for item in channel.items().iter() {
-            if item.title().is_none() || item.link().is_none() {
+            if item.title().is_none() || item.link().is_none() || item.guid().is_none() {
                 continue;
             }
 
             let title = item.title().unwrap();
             let link = item.link().unwrap();
 
+            let id = item.link().unwrap();
+            let id_hash = &format!("{:x}", md5::compute(id));
+
             let doc_title = doc! {
                 "title": title,
                 "changed": get_unix_seconds()
             };
 
-            let digest = md5::compute(title);
-            let md5_title = format!("{:x}", digest);
+            let md5_title = format!("{:x}", md5::compute(title));
 
-            if items_by_id.contains_key(link) {
+            if items_by_id.contains_key(id_hash) {
                 let stored_title_md5 = items_by_id
-                    .get(link)
+                    .get(id_hash)
                     .unwrap()
                     .get_str("latest_title_hash")
                     .unwrap();
@@ -80,12 +86,13 @@ pub async fn main() -> Result<(), anyhow::Error> {
                 }
             } else {
                 let doc_item = doc! {
-                    "_id": link,
+                    "_id": id_hash,
                     "titles": [doc_title],
                     "latest_title_hash": md5_title,
                     "feed": "tagesschau.de",
                     "created":  get_unix_seconds(),
-                    "title_changed": false
+                    "title_changed": false,
+                    "link": link
                 };
 
                 println!("+ {}", title);
