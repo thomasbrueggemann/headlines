@@ -1,9 +1,11 @@
 use futures::stream::TryStreamExt;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{doc, DateTime, Document};
+use mongodb::Collection;
 use mongodb::{options::ClientOptions, Client};
-use rss::Channel;
+use rss::{Channel, Item};
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+
+mod HeadlineVersionsRepository;
 
 #[tokio::main]
 pub async fn main() -> Result<(), anyhow::Error> {
@@ -11,35 +13,26 @@ pub async fn main() -> Result<(), anyhow::Error> {
 
     let client = Client::with_options(opts)?;
     let db = client.database("headlines");
-    let headline_versions = db.collection::<Document>("headline_versions");
     let feeds = db.collection::<Document>("feeds");
+    let headlines_updated_stats = db.collection::<Document>("headlines_updated_stats");
 
-    let mut feeds_cursor = feeds.find(doc! {}, None).await?;
+    let headline_version_repository = HeadlineVersionsRepository::new(&client);
 
-    while let Some(feed) = feeds_cursor.try_next().await? {
+    let feeds_cursor = feeds.find(None, None).await?;
+    let feeds: Vec<Document> = feeds_cursor.try_collect().await?;
+
+    for feed in feeds.iter() {
         let feed_url = feed.get_str("rss").unwrap();
-        println!("# PARSE FEED {}", feed_url);
+        let feed_id = feed.get_str("_id").unwrap();
+
+        println!("# PARSE FEED {}", feed_id);
 
         let channel = read_feed(feed_url).await?;
-        let mut items_by_id: HashMap<String, Document> = HashMap::new();
 
-        let ids: Vec<String> = channel
-            .items()
-            .iter()
-            .filter(|item| item.guid().is_some())
-            .map(|item| &item.guid().unwrap().value)
-            .map(|guid| format!("{:x}", md5::compute(guid)))
-            .collect();
+        let items_by_id =
+            get_item_by_id_lookup(feed_id, channel.items(), &headline_version_repository).await?;
 
-        let filter_ids = doc! { "_id": { "$in": &ids } };
-        println!("ids {}", ids.len());
-
-        let mut headline_versions_cursor = headline_versions.find(filter_ids, None).await?;
-        while let Some(item) = headline_versions_cursor.try_next().await? {
-            items_by_id.insert(item.get_str("_id").unwrap().to_string(), item);
-        }
-
-        println!("ietms by id {}", items_by_id.len());
+        let mut update_counter: i32 = 0;
 
         for item in channel.items().iter() {
             if item.title().is_none() || item.link().is_none() || item.guid().is_none() {
@@ -49,73 +42,94 @@ pub async fn main() -> Result<(), anyhow::Error> {
             let title = item.title().unwrap();
             let link = item.link().unwrap();
 
-            let id = item.link().unwrap();
-            let id_hash = &format!("{:x}", md5::compute(id));
+            let id = generate_id(feed.get_str("_id").unwrap(), &item.guid().unwrap().value);
 
             let doc_title = doc! {
                 "title": title,
-                "changed": get_unix_seconds()
+                "changed": DateTime::now()
             };
 
             let md5_title = format!("{:x}", md5::compute(title));
 
-            if items_by_id.contains_key(id_hash) {
+            if items_by_id.contains_key(&id) {
                 let stored_title_md5 = items_by_id
-                    .get(id_hash)
+                    .get(&id)
                     .unwrap()
                     .get_str("latest_title_hash")
                     .unwrap();
 
-                let update_query = doc! { "_id": link };
+                let update_query = doc! { "_id": &id };
 
                 if md5_title != stored_title_md5 {
-                    let update = doc! {
-                        "$set": {
-                            "latest_title_hash": md5_title,
-                            "title_changed": true
-                        },
-                        "$push": {
-                            "titles": doc_title
-                        }
-                    };
+                    println!("~ {}", &id);
 
-                    println!("~ {}", title);
-                    headline_versions
-                        .update_one(update_query, update, None)
+                    headline_version_repository
+                        .title_changed(&id, &title)
                         .await?;
+
+                    update_counter += 1;
                 }
             } else {
-                let doc_item = doc! {
-                    "_id": id_hash,
-                    "titles": [doc_title],
-                    "latest_title_hash": md5_title,
-                    "feed": "tagesschau.de",
-                    "created":  get_unix_seconds(),
-                    "title_changed": false,
-                    "link": link
-                };
+                println!("+ {}", &id);
 
-                println!("+ {}", title);
-                headline_versions.insert_one(doc_item, None).await?;
+                headline_version_repository
+                    .insert(
+                        &id,
+                        &title,
+                        &link,
+                        &feed_url,
+                        feed.get_str("locale").unwrap(),
+                    )
+                    .await?;
             }
+        }
+
+        if update_counter > 0 {
+            let stats_doc = doc! {
+               "metadata": [{"feed": feed_id}, {"locale": feed.get_str("locale").unwrap()}],
+               "timestamp": DateTime::now(),
+               "updated": update_counter
+            };
+
+            headlines_updated_stats.insert_one(stats_doc, None).await?;
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 async fn read_feed(feed_url: &str) -> Result<Channel, anyhow::Error> {
     let content = reqwest::get(feed_url).await?.bytes().await?;
-
     let channel = Channel::read_from(&content[..])?;
+
     Ok(channel)
 }
 
-fn get_unix_seconds() -> i64 {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
+async fn get_item_by_id_lookup(
+    feed_id: &str,
+    items: &[Item],
+    headline_versions_repository: &HeadlineVersionsRepository,
+) -> Result<HashMap<String, Document>, anyhow::Error> {
+    let ids: Vec<String> = items
+        .iter()
+        .filter(|item| item.guid().is_some())
+        .map(|item| generate_id(feed_id, &item.guid().unwrap().value))
+        .collect();
 
-    return since_the_epoch.as_secs() as i64;
+    let mut items_by_id: HashMap<String, Document> = HashMap::new();
+    let documents: Vec<Document> = headline_versions_repository.get_by_ids(ids).await?;
+
+    for document in documents.iter() {
+        items_by_id.insert(
+            document.get_str("_id").unwrap().to_string(),
+            document.to_owned(),
+        );
+    }
+
+    Ok(items_by_id)
+}
+
+fn generate_id(feed_id: &str, guid: &str) -> String {
+    let raw_id = format!("{}@{}", feed_id, guid);
+    format!("{:x}", md5::compute(raw_id))
 }
