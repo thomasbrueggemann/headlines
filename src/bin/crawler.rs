@@ -3,14 +3,10 @@ use mongodb::{options::ClientOptions, Client};
 use rss::{Channel, Item};
 use std::collections::HashMap;
 
-mod headline_versions_repository;
-use headline_versions_repository::HeadlineVersionsRepository;
-
-mod feeds_repository;
-use feeds_repository::FeedsRepository;
-
-mod headlines_updated_stats_repository;
-use headlines_updated_stats_repository::HeadlinesUpdatedStatsRepository;
+use headlines::{
+    feeds_repository::FeedsRepository, headline_versions_repository::HeadlineVersionsRepository,
+    headlines_updated_stats_repository::HeadlinesUpdatedStatsRepository,
+};
 
 #[tokio::main]
 pub async fn main() -> Result<(), anyhow::Error> {
@@ -28,13 +24,11 @@ pub async fn main() -> Result<(), anyhow::Error> {
         let feed_locale = feed.get_str("locale").unwrap();
 
         println!("# PARSE FEED {}", feed_id);
-
         let channel = read_feed(feed_url).await?;
+        let mut update_counter: i32 = 0;
 
         let items_by_id =
             get_item_by_id_lookup(feed_id, channel.items(), &headline_versions_repo).await?;
-
-        let mut update_counter: i32 = 0;
 
         for item in channel.items().iter() {
             if item.title().is_none() || item.link().is_none() || item.guid().is_none() {
@@ -42,10 +36,10 @@ pub async fn main() -> Result<(), anyhow::Error> {
             }
 
             let title = item.title().unwrap();
-            let link = item.link().unwrap();
-
-            let id = generate_id(feed.get_str("_id").unwrap(), &item.guid().unwrap().value);
             let md5_title = format!("{:x}", md5::compute(title));
+
+            let link = item.link().unwrap();
+            let id = generate_id(feed.get_str("_id").unwrap(), &item.guid().unwrap().value);
 
             if items_by_id.contains_key(&id) {
                 let stored_title_md5 = items_by_id
