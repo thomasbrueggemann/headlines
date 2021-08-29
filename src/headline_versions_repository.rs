@@ -74,7 +74,7 @@ impl HeadlineVersionsRepository {
         id: &str,
         title: &str,
         link: &str,
-        feed_url: &str,
+        feed_id: &str,
         feed_locale: &str,
     ) {
         let doc_title = doc! {
@@ -88,7 +88,7 @@ impl HeadlineVersionsRepository {
             "_id": id,
             "titles": [doc_title],
             "latest_title_hash": md5_title,
-            "feed": feed_url,
+            "feed": feed_id,
             "created": DateTime::now(),
             "changed": DateTime::now(),
             "title_changed": false,

@@ -2,6 +2,7 @@ use mongodb::bson::Document;
 use mongodb::{options::ClientOptions, Client};
 use rss::{Channel, Item};
 use std::collections::HashMap;
+use std::env;
 use tokio::time::{sleep, Duration};
 
 use headlines::{
@@ -12,7 +13,8 @@ use headlines::{
 #[tokio::main]
 pub async fn main() -> Result<(), anyhow::Error> {
     loop {
-        let opts = ClientOptions::parse("mongodb://headlines:senildeah@localhost:27017").await?;
+        let connection_string = env::var("MONGO_CONNECTION_STRING").unwrap();
+        let opts = ClientOptions::parse(connection_string).await?;
         let client = Client::with_options(opts)?;
 
         let headline_versions_repo = HeadlineVersionsRepository::new(&client);
@@ -59,7 +61,7 @@ pub async fn main() -> Result<(), anyhow::Error> {
                     println!("+ {}", &id);
 
                     headline_versions_repo
-                        .insert(&id, &title, &link, &feed_url, &feed_locale)
+                        .insert(&id, &title, &link, &feed_id, &feed_locale)
                         .await;
                 }
             }

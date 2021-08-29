@@ -17,7 +17,7 @@ COPY ./src ./src
 
 # build for release
 RUN rm ./target/release/deps/headlines*
-RUN cargo build --bin api --release
+RUN cargo build --bin crawler --release
 
 # our final base
 FROM debian:buster-slim
@@ -26,9 +26,7 @@ RUN apt update
 RUN apt install openssl apt-transport-https ca-certificates -y
 
 # copy the build artifact from the build stage
-COPY --from=build /headlines/target/release/api .
+COPY --from=build /headlines/target/release/crawler .
 
 # set the startup command to run your binary
-ENV ROCKET_ADDRESS=0.0.0.0
-EXPOSE 8000
-CMD ["./api"]
+CMD ["./crawler"]

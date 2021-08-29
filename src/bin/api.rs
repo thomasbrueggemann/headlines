@@ -1,5 +1,3 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-
 #[macro_use]
 extern crate rocket;
 
@@ -7,6 +5,7 @@ use mongodb::bson::Document;
 use mongodb::{options::ClientOptions, Client};
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;
+use std::env;
 
 use headlines::headline_versions_repository::HeadlineVersionsRepository;
 
@@ -27,9 +26,8 @@ struct HeadlineChangesResponse {
 
 #[get("/headline/changes?<locale>")]
 async fn headline_changes(locale: String) -> Json<Vec<HeadlineChangesResponse>> {
-    let opts = ClientOptions::parse("mongodb://headlines:senildeah@localhost:27017")
-        .await
-        .unwrap();
+    let connection_string = env::var("MONGO_CONNECTION_STRING").unwrap();
+    let opts = ClientOptions::parse(connection_string).await.unwrap();
 
     let client = Client::with_options(opts).unwrap();
     let headline_versions_repo = HeadlineVersionsRepository::new(&client);
