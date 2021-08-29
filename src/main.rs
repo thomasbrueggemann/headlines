@@ -1,36 +1,38 @@
-use futures::stream::TryStreamExt;
-use mongodb::bson::{doc, DateTime, Document};
-use mongodb::Collection;
+use mongodb::bson::Document;
 use mongodb::{options::ClientOptions, Client};
 use rss::{Channel, Item};
 use std::collections::HashMap;
 
-mod HeadlineVersionsRepository;
+mod headline_versions_repository;
+use headline_versions_repository::HeadlineVersionsRepository;
+
+mod feeds_repository;
+use feeds_repository::FeedsRepository;
+
+mod headlines_updated_stats_repository;
+use headlines_updated_stats_repository::HeadlinesUpdatedStatsRepository;
 
 #[tokio::main]
 pub async fn main() -> Result<(), anyhow::Error> {
     let opts = ClientOptions::parse("mongodb://headlines:senildeah@localhost:27017").await?;
-
     let client = Client::with_options(opts)?;
-    let db = client.database("headlines");
-    let feeds = db.collection::<Document>("feeds");
-    let headlines_updated_stats = db.collection::<Document>("headlines_updated_stats");
 
-    let headline_version_repository = HeadlineVersionsRepository::new(&client);
+    let headline_versions_repo = HeadlineVersionsRepository::new(&client);
+    let feeds_repo = FeedsRepository::new(&client);
+    let headlines_updated_stats_repo = HeadlinesUpdatedStatsRepository::new(&client);
 
-    let feeds_cursor = feeds.find(None, None).await?;
-    let feeds: Vec<Document> = feeds_cursor.try_collect().await?;
-
+    let feeds = feeds_repo.get_all().await?;
     for feed in feeds.iter() {
         let feed_url = feed.get_str("rss").unwrap();
         let feed_id = feed.get_str("_id").unwrap();
+        let feed_locale = feed.get_str("locale").unwrap();
 
         println!("# PARSE FEED {}", feed_id);
 
         let channel = read_feed(feed_url).await?;
 
         let items_by_id =
-            get_item_by_id_lookup(feed_id, channel.items(), &headline_version_repository).await?;
+            get_item_by_id_lookup(feed_id, channel.items(), &headline_versions_repo).await?;
 
         let mut update_counter: i32 = 0;
 
@@ -43,12 +45,6 @@ pub async fn main() -> Result<(), anyhow::Error> {
             let link = item.link().unwrap();
 
             let id = generate_id(feed.get_str("_id").unwrap(), &item.guid().unwrap().value);
-
-            let doc_title = doc! {
-                "title": title,
-                "changed": DateTime::now()
-            };
-
             let md5_title = format!("{:x}", md5::compute(title));
 
             if items_by_id.contains_key(&id) {
@@ -58,40 +54,24 @@ pub async fn main() -> Result<(), anyhow::Error> {
                     .get_str("latest_title_hash")
                     .unwrap();
 
-                let update_query = doc! { "_id": &id };
-
                 if md5_title != stored_title_md5 {
                     println!("~ {}", &id);
-
-                    headline_version_repository
-                        .title_changed(&id, &title)
-                        .await?;
-
+                    headline_versions_repo.title_changed(&id, &title).await;
                     update_counter += 1;
                 }
             } else {
                 println!("+ {}", &id);
 
-                headline_version_repository
-                    .insert(
-                        &id,
-                        &title,
-                        &link,
-                        &feed_url,
-                        feed.get_str("locale").unwrap(),
-                    )
-                    .await?;
+                headline_versions_repo
+                    .insert(&id, &title, &link, &feed_url, &feed_locale)
+                    .await;
             }
         }
 
         if update_counter > 0 {
-            let stats_doc = doc! {
-               "metadata": [{"feed": feed_id}, {"locale": feed.get_str("locale").unwrap()}],
-               "timestamp": DateTime::now(),
-               "updated": update_counter
-            };
-
-            headlines_updated_stats.insert_one(stats_doc, None).await?;
+            headlines_updated_stats_repo
+                .insert(update_counter, &feed_id, &feed_locale)
+                .await;
         }
     }
 
@@ -108,7 +88,7 @@ async fn read_feed(feed_url: &str) -> Result<Channel, anyhow::Error> {
 async fn get_item_by_id_lookup(
     feed_id: &str,
     items: &[Item],
-    headline_versions_repository: &HeadlineVersionsRepository,
+    headline_versions_repo: &HeadlineVersionsRepository,
 ) -> Result<HashMap<String, Document>, anyhow::Error> {
     let ids: Vec<String> = items
         .iter()
@@ -117,7 +97,7 @@ async fn get_item_by_id_lookup(
         .collect();
 
     let mut items_by_id: HashMap<String, Document> = HashMap::new();
-    let documents: Vec<Document> = headline_versions_repository.get_by_ids(ids).await?;
+    let documents: Vec<Document> = headline_versions_repo.get_by_ids(ids).await?;
 
     for document in documents.iter() {
         items_by_id.insert(

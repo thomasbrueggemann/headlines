@@ -38,6 +38,9 @@ impl HeadlineVersionsRepository {
                 "title_changed": true,
                 "changed": DateTime::now()
             },
+            "$unset": {
+                "no_change_expiry": ""
+            },
             "$push": {
                 "titles": doc_title
             }
@@ -45,7 +48,10 @@ impl HeadlineVersionsRepository {
 
         let update_query = doc! { "_id": id };
 
-        self.collection.update_one(update_query, update, None).await;
+        self.collection
+            .update_one(update_query, update, None)
+            .await
+            .unwrap();
     }
 
     pub async fn insert(
@@ -72,9 +78,10 @@ impl HeadlineVersionsRepository {
             "changed": DateTime::now(),
             "title_changed": false,
             "link": link,
-            "locale": feed_locale
+            "locale": feed_locale,
+            "no_change_expiry": DateTime::now()
         };
 
-        self.collection.insert_one(doc_item, None).await;
+        self.collection.insert_one(doc_item, None).await.unwrap();
     }
 }
