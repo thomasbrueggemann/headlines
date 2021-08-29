@@ -7,15 +7,33 @@
 		{
 			"type": "lldb",
 			"request": "launch",
-			"name": "Debug executable 'headlines'",
+			"name": "Debug API",
 			"cargo": {
 				"args": [
 					"build",
-					"--bin=headlines",
+					"--bin=api",
 					"--package=headlines"
 				],
 				"filter": {
-					"name": "headlines",
+					"name": "api",
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug Crawler",
+			"cargo": {
+				"args": [
+					"build",
+					"--bin=crawler",
+					"--package=headlines"
+				],
+				"filter": {
+					"name": "crawler",
 					"kind": "bin"
 				}
 			},

@@ -1,5 +1,6 @@
 use futures::stream::TryStreamExt;
 use mongodb::bson::{doc, DateTime, Document};
+use mongodb::options::FindOptions;
 use mongodb::{Client, Collection};
 
 pub struct HeadlineVersionsRepository {
@@ -19,6 +20,20 @@ impl HeadlineVersionsRepository {
     pub async fn get_by_ids(&self, ids: Vec<String>) -> Result<Vec<Document>, anyhow::Error> {
         let filter_ids = doc! { "_id": { "$in": &ids } };
         let cursor = self.collection.find(filter_ids, None).await?;
+        let documents: Vec<Document> = cursor.try_collect().await?;
+
+        Ok(documents)
+    }
+
+    pub async fn get(&self, locale: &str) -> Result<Vec<Document>, anyhow::Error> {
+        let filter_ids = doc! { "title_changed": true, "locale": locale };
+
+        let find_options = FindOptions::builder()
+            .sort(doc! { "changed": -1 })
+            .limit(100)
+            .build();
+
+        let cursor = self.collection.find(filter_ids, find_options).await?;
         let documents: Vec<Document> = cursor.try_collect().await?;
 
         Ok(documents)
