@@ -25,6 +25,7 @@ struct HeadlineChangesResponse {
     link: String,
     changed: i64,
     created: i64,
+    feed: String,
 }
 
 #[get("/headline/changes?<locale>")]
@@ -59,6 +60,7 @@ async fn headline_changes(locale: String) -> Json<Vec<HeadlineChangesResponse>> 
                 link: headline_version.get_str("link").unwrap().to_string(),
                 created: get_timestamp_seconds(headline_version, "created"),
                 changed: get_timestamp_seconds(headline_version, "changed"),
+                feed: headline_version.get_str("feed").unwrap().to_string(),
             }
         })
         .collect();

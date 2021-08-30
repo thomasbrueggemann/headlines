@@ -16,52 +16,187 @@
         background-color: #fafafa;
         height: 100%;
       }
+
+      .card {
+        margin-bottom: 50px;
+      }
+
+      .centerhero {
+        text-align: center;
+      }
+
+      .headlines {
+        margin-top: 30px;
+      }
+
+      .removed {
+        text-decoration: line-through;
+        background-color: #feb7c2;
+      }
+
+      .added {
+        background-color: #84fed5;
+      }
     </style>
   </head>
 
   <body>
-    <section class="section">
-      <div class="container">
-        <h1 class="title">Headline Changes</h1>
-        <p class="subtitle">🗞 Crawls newspaper headline changes over time</p>
+    <div id="app"></div>
 
-        <div id="changes"></div>
-        <div class="card">
-          <div class="card-content">
-            <p class="title">
-              “There are two hard things in computer science: cache
-              invalidation, naming things, and off-by-one errors.”
-            </p>
-            <p class="subtitle">Jeff Atwood</p>
+    <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.0.0/diff.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/luxon/2.0.2/luxon.min.js"></script>
+
+    <script type="text/babel">
+      const DateTime = luxon.DateTime;
+
+      function AppContainer() {
+        return (
+          <div>
+            <section className="section">
+              <div className="container centerhero">
+                <h1 className="title">Headline Changes</h1>
+                <p className="subtitle">
+                  🗞 Crawls newspaper headline changes over time
+                </p>
+                <LocaleSelector />
+              </div>
+              <div className="container headlines">
+                <HeadlineChanges />
+              </div>
+            </section>
           </div>
-        </div>
-      </div>
-    </section>
-    <div id="app">{{ message }}</div>
+        );
+      }
 
-    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
-    <script>
-      var app = new Vue({
-        el: "#changes",
-        data: {
-          changes: [],
-        },
-        created() {
-          this.fetchData();
-        },
-        watch: {
-          $route: "fetchData",
-        },
-        methods: {
-          fetchData() {
-            fetch(
-              "https://headlines.thomasbrueggemann.com/headline/changes?locale=de"
-            )
-              .then((response) => response.json())
-              .then((data) => console.log(data));
-          },
-        },
-      });
+      function LocaleSelector() {
+        return (
+          <div className="select">
+            <select>
+              <option value="de">Germany</option>
+              <option value="se">Sweden</option>
+              <option value="uk">United Kingdom</option>
+              <option value="us" selected>
+                United States
+              </option>
+            </select>
+          </div>
+        );
+      }
+
+      function HeadlineChanges() {
+        const [diffData, setDiffData] = React.useState([]);
+
+        React.useEffect(() => {
+          fetch(
+            "https://headlines.thomasbrueggemann.com/headline/changes?locale=us"
+          )
+            .then((response) => response.json())
+            .then((data) => {
+              const transformed = data.map((x) => {
+                var diffs = Diff.diffWordsWithSpace(
+                  x.original_title,
+                  x.changed_title
+                );
+
+                if (diffs.length >= x.original_title.split(" ").length / 2) {
+                  diffs = Diff.diffSentences(x.original_title, x.changed_title);
+                }
+
+                return {
+                  feed: x.feed,
+                  diff: diffs,
+                  link: x.link,
+                  published: DateTime.fromSeconds(x.created).toLocaleString(
+                    DateTime.DATETIME_SHORT_WITH_SECONDS
+                  ),
+                  changed: DateTime.fromSeconds(x.changed)
+                    .diff(DateTime.fromSeconds(x.created), ["hours", "minutes"])
+                    .toObject(),
+                };
+              });
+
+              setDiffData(transformed);
+            });
+        }, []);
+
+        return (
+          <div>
+            {diffData.map((diff, i) => {
+              return <HeadlineChange diff={diff} key={i} />;
+            })}{" "}
+          </div>
+        );
+      }
+
+      function HeadlineChange(props) {
+        return (
+          <div className="card">
+            <div className="card-content">
+              <p>
+                <a className="title" href={props.diff["link"]} target="_blank">
+                  {props.diff["diff"].map((diff, i) => {
+                    return <DiffSegment diff={diff} key={i} />;
+                  })}
+                </a>
+              </p>
+            </div>
+            <footer class="card-footer">
+              <p class="card-footer-item">
+                <span>
+                  <a href={props.diff["link"]} target="_blank">
+                    {props.diff["feed"]}
+                  </a>
+                </span>
+              </p>
+              <p class="card-footer-item">
+                <span>
+                  <strong>Published:</strong> {props.diff["published"]}
+                </span>
+              </p>
+              <p class="card-footer-item">
+                <span>
+                  <strong>Changed:</strong>{" "}
+                  <ChangedTimeLater duration={props.diff["changed"]} />
+                </span>
+              </p>
+            </footer>
+          </div>
+        );
+      }
+
+      function ChangedTimeLater(props) {
+        var qualifier, unit;
+
+        if (props.duration.hours > 0) {
+          qualifier = Math.round(props.duration.hours);
+          unit = props.duration.hours === 1 ? "hour" : "hours";
+        } else {
+          qualifier = Math.round(props.duration.minutes);
+          unit = props.duration.minutes === 1 ? "minute" : "minutes";
+        }
+
+        return (
+          <span>
+            {qualifier} {unit} later
+          </span>
+        );
+      }
+
+      function DiffSegment(props) {
+        if (props.diff.removed) {
+          return <span className="removed">{props.diff.value}</span>;
+        } else if (props.diff.added) {
+          return <span className="added">{props.diff.value}</span>;
+        } else {
+          return <span>{props.diff.value}</span>;
+        }
+      }
+
+      const root = document.getElementById("app");
+      ReactDOM.render(<AppContainer></AppContainer>, root);
     </script>
   </body>
 </html>
