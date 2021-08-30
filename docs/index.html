@@ -1,3 +1,67 @@
+<!DOCTYPE html>
+
 <html>
-  
-Hi
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Headline Changes</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css"
+    />
+    <style>
+      html,
+      body {
+        background-color: #fafafa;
+        height: 100%;
+      }
+    </style>
+  </head>
+
+  <body>
+    <section class="section">
+      <div class="container">
+        <h1 class="title">Headline Changes</h1>
+        <p class="subtitle">🗞 Crawls newspaper headline changes over time</p>
+
+        <div id="changes"></div>
+        <div class="card">
+          <div class="card-content">
+            <p class="title">
+              “There are two hard things in computer science: cache
+              invalidation, naming things, and off-by-one errors.”
+            </p>
+            <p class="subtitle">Jeff Atwood</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <div id="app">{{ message }}</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+    <script>
+      var app = new Vue({
+        el: "#changes",
+        data: {
+          changes: [],
+        },
+        created() {
+          this.fetchData();
+        },
+        watch: {
+          $route: "fetchData",
+        },
+        methods: {
+          fetchData() {
+            fetch(
+              "https://headlines.thomasbrueggemann.com/headline/changes?locale=de"
+            )
+              .then((response) => response.json())
+              .then((data) => console.log(data));
+          },
+        },
+      });
+    </script>
+  </body>
+</html>

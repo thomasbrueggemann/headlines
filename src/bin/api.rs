@@ -3,8 +3,11 @@ extern crate rocket;
 
 use mongodb::bson::Document;
 use mongodb::{options::ClientOptions, Client};
+use rocket::fairing::{Fairing, Info, Kind};
+use rocket::http::Header;
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;
+use rocket::{Request, Response};
 use std::env;
 
 use headlines::headline_versions_repository::HeadlineVersionsRepository;
@@ -71,7 +74,31 @@ fn get_timestamp_seconds(doc: &Document, key: &str) -> i64 {
     doc.get_datetime(key).unwrap().timestamp_millis() / 1000
 }
 
+pub struct CORS;
+
+#[rocket::async_trait]
+impl Fairing for CORS {
+    fn info(&self) -> Info {
+        Info {
+            name: "Add CORS headers to responses",
+            kind: Kind::Response,
+        }
+    }
+
+    async fn on_response<'r>(&self, _req: &'r Request<'_>, res: &mut Response<'r>) {
+        res.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+        res.set_header(Header::new(
+            "Access-Control-Allow-Methods",
+            "POST, GET, PATCH, OPTIONS",
+        ));
+        res.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+        res.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+    }
+}
+
 #[launch]
 fn rocket() -> _ {
-    rocket::build().mount("/", routes![index, headline_changes])
+    rocket::build()
+        .attach(CORS)
+        .mount("/", routes![index, headline_changes])
 }
