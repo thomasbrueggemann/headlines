@@ -53,6 +53,10 @@
       const DateTime = luxon.DateTime;
 
       function AppContainer() {
+        const [locale, setLocale] = React.useState(
+          localStorage.getItem("locale") || "us"
+        );
+
         return (
           <div>
             <section className="section">
@@ -61,19 +65,32 @@
                 <p className="subtitle">
                   🗞 Crawls newspaper headline changes over time
                 </p>
-                <LocaleSelector />
+                <LocaleSelector
+                  locale={locale}
+                  onLocaleChanged={(changedLocale) => {
+                    setLocale(changedLocale);
+                  }}
+                />
               </div>
               <div className="container headlines">
-                <HeadlineChanges />
+                <HeadlineChanges locale={locale} />
               </div>
             </section>
           </div>
         );
       }
 
-      function LocaleSelector() {
+      function LocaleSelector(props) {
         return (
-          <div className="select">
+          <div
+            className="select"
+            onChange={(e) => {
+              const l = e.target.value;
+              localStorage.setItem("locale", l);
+              props.onLocaleChanged(l);
+            }}
+            value={props.locale}
+          >
             <select>
               <option value="de">Germany</option>
               <option value="se">Sweden</option>
@@ -86,12 +103,14 @@
         );
       }
 
-      function HeadlineChanges() {
+      function HeadlineChanges(props) {
         const [diffData, setDiffData] = React.useState([]);
+        const [loading, setLoading] = React.useState(false);
 
         React.useEffect(() => {
+          setLoading(true);
           fetch(
-            "https://headlines.thomasbrueggemann.com/headline/changes?locale=us"
+            `https://headlines.thomasbrueggemann.com/headline/changes?locale=${props.locale}`
           )
             .then((response) => response.json())
             .then((data) => {
@@ -118,9 +137,14 @@
                 };
               });
 
+              setLoading(false);
               setDiffData(transformed);
             });
-        }, []);
+        }, [props.locale]);
+
+        if (loading) {
+          return <center>Loading...</center>;
+        }
 
         return (
           <div>
