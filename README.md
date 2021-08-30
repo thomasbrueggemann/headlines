@@ -1,1 +1,1 @@
-https://github.com/kpdecker/jsdiff
+https://thomasbrueggemann.github.io/headlines/
