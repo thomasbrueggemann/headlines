@@ -92,14 +92,39 @@
             value={props.locale}
           >
             <select>
-              <option value="de">Germany</option>
-              <option value="se">Sweden</option>
-              <option value="uk">United Kingdom</option>
-              <option value="us" selected>
-                United States
-              </option>
+              <LocaleSelectorOption
+                locale="de"
+                name="Germany"
+                selectedLocale={props.locale}
+              />
+              <LocaleSelectorOption
+                locale="se"
+                name="Sweden"
+                selectedLocale={props.locale}
+              />
+              <LocaleSelectorOption
+                locale="uk"
+                name="United Kingdom"
+                selectedLocale={props.locale}
+              />
+              <LocaleSelectorOption
+                locale="us"
+                name="United States"
+                selectedLocale={props.locale}
+              />
             </select>
           </div>
+        );
+      }
+
+      function LocaleSelectorOption(props) {
+        return (
+          <option
+            value={props.locale}
+            selected={props.locale == props.selectedLocale}
+          >
+            {props.name}
+          </option>
         );
       }
 
