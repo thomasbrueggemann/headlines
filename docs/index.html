@@ -52,7 +52,7 @@
     <script type="text/babel">
       const DateTime = luxon.DateTime;
       const BASE_URL = "https://headlines.thomasbrueggemann.com";
-      const LOADING_THRESHOLD = 500;
+      const LOADING_THRESHOLD = 250;
 
       function AppContainer() {
         const [showStats, setShowStats] = React.useState(false);
@@ -100,11 +100,13 @@
         const [data, setData] = React.useState([]);
         const [loading, setLoading] = React.useState(true);
         const [showLoading, setShowLoading] = React.useState(false);
+        const [showModal, setShowModal] = React.useState(false);
 
         React.useEffect(() => {
           setLoading(true);
           let loadingTimeout = setTimeout(() => {
             setShowLoading(true);
+            setShowModal(true);
           }, LOADING_THRESHOLD);
 
           fetch(`${BASE_URL}/feeds/statistics?locale=${props.locale}`)
@@ -113,12 +115,16 @@
               setData(data);
               clearTimeout(loadingTimeout);
               setLoading(false);
+              setShowModal(true);
               setShowLoading(false);
             });
         }, []);
 
+        let modalClass = "modal";
+        if (showModal) modalClass += " is-active";
+
         return (
-          <div className="modal is-active">
+          <div className={modalClass}>
             <div
               onClick={() => props.onClose()}
               className="modal-background"
