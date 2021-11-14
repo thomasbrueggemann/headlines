@@ -150,18 +150,21 @@
             .then((response) => response.json())
             .then((data) => {
               const transformed = data.map((x) => {
-                var diffs = Diff.diffWordsWithSpace(
+                let type = "w";
+                let diffs = Diff.diffWordsWithSpace(
                   x.original_title,
                   x.changed_title
                 );
 
                 if (diffs.length >= x.original_title.split(" ").length / 2) {
                   diffs = Diff.diffSentences(x.original_title, x.changed_title);
+                  type = "s";
                 }
 
                 return {
                   feed: x.feed,
                   diff: diffs,
+                  type: type,
                   link: x.link,
                   published: DateTime.fromSeconds(x.created).toLocaleString(
                     DateTime.DATETIME_SHORT_WITH_SECONDS
@@ -199,7 +202,13 @@
               <p>
                 <a className="title" href={props.diff["link"]} target="_blank">
                   {props.diff["diff"].map((diff, i) => {
-                    return <DiffSegment diff={diff} key={i} />;
+                    return (
+                      <DiffSegment
+                        type={props.diff["type"]}
+                        diff={diff}
+                        key={i}
+                      />
+                    );
                   })}
                 </a>
               </p>
@@ -248,7 +257,12 @@
 
       function DiffSegment(props) {
         if (props.diff.removed) {
-          return <span className="removed">{props.diff.value}</span>;
+          return (
+            <span className="removed">
+              {props.diff.value}
+              {props.type === "s" ? <br /> : null}
+            </span>
+          );
         } else if (props.diff.added) {
           return <span className="added">{props.diff.value}</span>;
         } else {
