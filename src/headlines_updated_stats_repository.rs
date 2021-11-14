@@ -17,7 +17,10 @@ impl HeadlinesUpdatedStatsRepository {
 
     pub async fn insert(&self, update_counter: i32, feed_id: &str, feed_locale: &str) {
         let stats_doc = doc! {
-           "metadata": [{"feed": feed_id}, {"locale": feed_locale}],
+           "metadata": {
+               "feed": feed_id,
+               "locale": feed_locale
+            },
            "timestamp": DateTime::now(),
            "updated": update_counter
         };
