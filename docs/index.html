@@ -52,7 +52,8 @@
     <script type="text/babel">
       const DateTime = luxon.DateTime;
       const BASE_URL = "https://headlines.thomasbrueggemann.com";
-      const LOADING_THRESHOLD = 250;
+      const LOADING_THRESHOLD_MILLISECONDS = 250;
+      const CACHE_TTL_SECONDS = 60;
 
       function AppContainer() {
         const [showStats, setShowStats] = React.useState(false);
@@ -96,6 +97,39 @@
         );
       }
 
+      function fetchCached(url) {
+        return new Promise((resolve, reject) => {
+          try {
+            const cacheKey = `cache@${url}`;
+            const ttlKey = `ttl@${url}`;
+
+            const cached = localStorage.getItem(cacheKey);
+            const ttl = localStorage.getItem(ttlKey);
+
+            const cachedAge = DateTime.utc().diff(
+              DateTime.fromSeconds(parseInt(ttl))
+            );
+            const cachedExpired = cachedAge.as("seconds") > CACHE_TTL_SECONDS;
+
+            if (cached && !cachedExpired) {
+              return resolve(JSON.parse(cached));
+            }
+
+            fetch(url)
+              .then((response) => response.json())
+              .then((data) => {
+                localStorage.setItem(cacheKey, JSON.stringify(data));
+                localStorage.setItem(ttlKey, DateTime.utc().toSeconds());
+
+                return resolve(data);
+              })
+              .catch((e) => reject(e));
+          } catch (e) {
+            return reject(e);
+          }
+        });
+      }
+
       function FeedStatisticsModal(props) {
         const [data, setData] = React.useState([]);
         const [loading, setLoading] = React.useState(true);
@@ -107,17 +141,17 @@
           let loadingTimeout = setTimeout(() => {
             setShowLoading(true);
             setShowModal(true);
-          }, LOADING_THRESHOLD);
+          }, LOADING_THRESHOLD_MILLISECONDS);
 
-          fetch(`${BASE_URL}/feeds/statistics?locale=${props.locale}`)
-            .then((response) => response.json())
-            .then((data) => {
-              setData(data);
-              clearTimeout(loadingTimeout);
-              setLoading(false);
-              setShowModal(true);
-              setShowLoading(false);
-            });
+          fetchCached(
+            `${BASE_URL}/feeds/statistics?locale=${props.locale}`
+          ).then((data) => {
+            setData(data);
+            clearTimeout(loadingTimeout);
+            setLoading(false);
+            setShowModal(true);
+            setShowLoading(false);
+          });
         }, []);
 
         let modalClass = "modal";
@@ -248,43 +282,43 @@
           setLoading(true);
           let loadingTimeout = setTimeout(() => {
             setShowLoading(true);
-          }, LOADING_THRESHOLD);
+          }, LOADING_THRESHOLD_MILLISECONDS);
 
-          fetch(`${BASE_URL}/headline/changes?locale=${props.locale}`)
-            .then((response) => response.json())
-            .then((data) => {
-              const transformed = data.map((x) => {
-                let type = "w";
-                let diffs = Diff.diffWordsWithSpace(
-                  x.original_title,
-                  x.changed_title
-                );
+          fetchCached(
+            `${BASE_URL}/headline/changes?locale=${props.locale}`
+          ).then((data) => {
+            const transformed = data.map((x) => {
+              let type = "w";
+              let diffs = Diff.diffWordsWithSpace(
+                x.original_title,
+                x.changed_title
+              );
 
-                if (diffs.length >= x.original_title.split(" ").length / 2) {
-                  diffs = Diff.diffSentences(x.original_title, x.changed_title);
-                  type = "s";
-                }
+              if (diffs.length >= x.original_title.split(" ").length / 2) {
+                diffs = Diff.diffSentences(x.original_title, x.changed_title);
+                type = "s";
+              }
 
-                return {
-                  feed: x.feed,
-                  diff: diffs,
-                  type: type,
-                  link: x.link,
-                  published: DateTime.fromSeconds(x.created).toLocaleString(
-                    DateTime.DATETIME_SHORT_WITH_SECONDS
-                  ),
-                  changed: DateTime.fromSeconds(x.changed)
-                    .diff(DateTime.fromSeconds(x.created), ["hours", "minutes"])
-                    .toObject(),
-                };
-              });
-
-              setDiffData(transformed);
-
-              setLoading(false);
-              setShowLoading(false);
-              clearTimeout(loadingTimeout);
+              return {
+                feed: x.feed,
+                diff: diffs,
+                type: type,
+                link: x.link,
+                published: DateTime.fromSeconds(x.created).toLocaleString(
+                  DateTime.DATETIME_SHORT_WITH_SECONDS
+                ),
+                changed: DateTime.fromSeconds(x.changed)
+                  .diff(DateTime.fromSeconds(x.created), ["hours", "minutes"])
+                  .toObject(),
+              };
             });
+
+            setDiffData(transformed);
+
+            setLoading(false);
+            setShowLoading(false);
+            clearTimeout(loadingTimeout);
+          });
         }, [props.locale]);
 
         if (loading) {
