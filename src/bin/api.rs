@@ -11,6 +11,7 @@ use rocket::{Request, Response};
 use std::env;
 
 use headlines::headline_versions_repository::HeadlineVersionsRepository;
+use headlines::headlines_updated_stats_repository::HeadlinesUpdatedStatsRepository;
 
 #[get("/")]
 fn index() -> &'static str {
@@ -26,6 +27,13 @@ struct HeadlineChangesResponse {
     changed: i64,
     created: i64,
     feed: String,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+struct FeedUpdateStatistics {
+    feed: String,
+    updates: i32,
 }
 
 #[get("/headline/changes?<locale>")]
@@ -68,6 +76,31 @@ async fn headline_changes(locale: String) -> Json<Vec<HeadlineChangesResponse>> 
     Json(response_items)
 }
 
+#[get("/feeds/statistics?<locale>")]
+async fn feeds_statistics(locale: String) -> Json<Vec<FeedUpdateStatistics>> {
+    let connection_string = env::var("MONGO_CONNECTION_STRING").unwrap();
+    let opts = ClientOptions::parse(connection_string).await.unwrap();
+
+    let client = Client::with_options(opts).unwrap();
+    let headlines_updated_stats_repo = HeadlinesUpdatedStatsRepository::new(&client);
+    let feed_update_stats = headlines_updated_stats_repo
+        .get_update_statistics_by_feed(&locale)
+        .await
+        .unwrap();
+
+    let mut response_items: Vec<FeedUpdateStatistics> = feed_update_stats
+        .iter()
+        .map(|stats| FeedUpdateStatistics {
+            feed: stats.get_str("_id").unwrap().to_string(),
+            updates: stats.get_i32("updates").unwrap(),
+        })
+        .collect();
+
+    response_items.sort_by(|a, b| b.updates.cmp(&a.updates));
+
+    Json(response_items)
+}
+
 fn get_title_string(doc: Option<&Document>) -> String {
     doc.unwrap().get_str("title").unwrap().to_string()
 }
@@ -102,5 +135,5 @@ impl Fairing for CORS {
 fn rocket() -> _ {
     rocket::build()
         .attach(CORS)
-        .mount("/", routes![index, headline_changes])
+        .mount("/", routes![index, headline_changes, feeds_statistics])
 }
