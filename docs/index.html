@@ -52,6 +52,7 @@
     <script type="text/babel">
       const DateTime = luxon.DateTime;
       const BASE_URL = "https://headlines.thomasbrueggemann.com";
+      const LOADING_THRESHOLD = 500;
 
       function AppContainer() {
         const [showStats, setShowStats] = React.useState(false);
@@ -97,15 +98,22 @@
 
       function FeedStatisticsModal(props) {
         const [data, setData] = React.useState([]);
-        const [loading, setLoading] = React.useState(false);
+        const [loading, setLoading] = React.useState(true);
+        const [showLoading, setShowLoading] = React.useState(false);
 
         React.useEffect(() => {
           setLoading(true);
+          let loadingTimeout = setTimeout(() => {
+            setShowLoading(true);
+          }, LOADING_THRESHOLD);
+
           fetch(`${BASE_URL}/feeds/statistics?locale=${props.locale}`)
             .then((response) => response.json())
             .then((data) => {
               setData(data);
+              clearTimeout(loadingTimeout);
               setLoading(false);
+              setShowLoading(false);
             });
         }, []);
 
@@ -125,7 +133,11 @@
                 ></button>
               </header>
               <section className="modal-card-body">
-                <FeedStatisticsModalBody loading={loading} data={data} />
+                <FeedStatisticsModalBody
+                  showLoading={showLoading}
+                  loading={loading}
+                  data={data}
+                />
               </section>
             </div>
           </div>
@@ -134,7 +146,9 @@
 
       function FeedStatisticsModalBody(props) {
         if (props.loading) {
-          return <center>Loading... 🥱</center>;
+          if (props.showLoading) {
+            return <center>Loading... 🥱</center>;
+          }
         } else if (props.data.lenght === 0) {
           return <center>Nothing to see here yet... 🤷</center>;
         }
@@ -221,10 +235,15 @@
 
       function HeadlineChanges(props) {
         const [diffData, setDiffData] = React.useState([]);
-        const [loading, setLoading] = React.useState(false);
+        const [loading, setLoading] = React.useState(true);
+        const [showLoading, setShowLoading] = React.useState(false);
 
         React.useEffect(() => {
           setLoading(true);
+          let loadingTimeout = setTimeout(() => {
+            setShowLoading(true);
+          }, LOADING_THRESHOLD);
+
           fetch(`${BASE_URL}/headline/changes?locale=${props.locale}`)
             .then((response) => response.json())
             .then((data) => {
@@ -254,14 +273,19 @@
                 };
               });
 
-              setLoading(false);
               setDiffData(transformed);
+
+              setLoading(false);
+              setShowLoading(false);
+              clearTimeout(loadingTimeout);
             });
         }, [props.locale]);
 
         if (loading) {
-          return <center>Loading... 🥱</center>;
-        } else if (diffData.length === 0) {
+          if (showLoading) {
+            return <center>Loading... 🥱</center>;
+          }
+        } else if (diffData.length == 0) {
           return <center>Nothing to see here yet... 🤷</center>;
         }
 
