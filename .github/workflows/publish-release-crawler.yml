@@ -1,4 +1,4 @@
-name: Publish Docker image
+name: Build and Publish Crawler
 
 on:
   release:
@@ -11,17 +11,17 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v2
-        
+
       - name: Run Docker on tmpfs
         uses: JonasAlfredsson/docker-on-tmpfs@v1
         with:
           tmpfs_size: 5
           swap_size: 4
-          swap_location: '/mnt/swapfile'
-        
+          swap_location: "/mnt/swapfile"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
@@ -43,6 +43,6 @@ jobs:
           context: .
           file: Dockerfile.Crawler
           push: true
-          platforms: linux/arm/v6
+          platforms: linux/arm/v7
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
