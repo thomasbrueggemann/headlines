@@ -1,27 +1,19 @@
 FROM --platform=$BUILDPLATFORM rust:1.54 as build
 
-RUN rustup target add armv7-unknown-linux-musleabihf
+RUN rustup target add armv7-unknown-linux-gnueabihf
 RUN apt-get update && apt-get -y install binutils-arm-linux-gnueabihf
 
-# create a new empty shell project
 RUN USER=root cargo new --bin headlines
 WORKDIR /headlines
 
-# copy over your manifests
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
-
-# copy your source tree
 COPY ./src ./src
 
-# build for release
-RUN cargo build --bin crawler --release --target armv7-unknown-linux-musleabihf
+RUN cargo build --bin crawler --release --target armv7-unknown-linux-gnueabihf
 
-# our final base
 FROM alpine:3.12
 
-# copy the build artifact from the build stage
-COPY --from=build /headlines/target/armv7-unknown-linux-musleabihf/release/crawler .
+COPY --from=build /headlines/target/armv7-unknown-linux-gnueabihf/release/crawler .
 
-# set the startup command to run your binary
 CMD ["./crawler"]
