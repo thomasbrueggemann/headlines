@@ -1,5 +1,8 @@
 FROM --platform=$BUILDPLATFORM rust:1.54 as build
 
+RUN rustup target add armv7-unknown-linux-musleabihf
+RUN apt-get update && apt-get -y install binutils-arm-linux-gnueabihf
+
 # create a new empty shell project
 RUN USER=root cargo new --bin headlines
 WORKDIR /headlines
@@ -8,25 +11,18 @@ WORKDIR /headlines
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 
-# this build step will cache your dependencies
-RUN cargo build --release
-RUN rm src/*.rs
-
 # copy your source tree
 COPY ./src ./src
 
 # build for release
 RUN rm ./target/release/deps/headlines*
-RUN cargo build --bin crawler --release
+RUN cargo build --bin crawler --release --target armv7-unknown-linux-musleabihf
 
 # our final base
-FROM debian:buster-slim
-
-RUN apt update
-RUN apt install openssl apt-transport-https ca-certificates -y
+FROM alpine:3.12
 
 # copy the build artifact from the build stage
-COPY --from=build /headlines/target/release/crawler .
+COPY --from=build /headlines/target/armv7-unknown-linux-musleabihf/release/crawler .
 
 # set the startup command to run your binary
 CMD ["./crawler"]
