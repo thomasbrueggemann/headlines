@@ -36,6 +36,6 @@ jobs:
           context: .
           file: Dockerfile.Crawler
           push: true
-          platforms: linux/arm64
+          platforms: linux/arm/v7
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
