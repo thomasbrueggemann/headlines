@@ -1,26 +1,11 @@
-FROM --platform=$BUILDPLATFORM rust:1.54 as build
+FROM dlecan/rust-crosscompiler-arm:stable as build
 
-RUN apt update && apt upgrade -y
-RUN apt install -y g++-arm-linux-gnueabihf libc6-dev-armhf-cross
-
-RUN rustup target add armv7-unknown-linux-gnueabihf
-RUN rustup toolchain install stable-armv7-unknown-linux-gnueabihf
-
-RUN USER=root cargo new --bin headlines
 WORKDIR /headlines
 
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./src ./src
 
-ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc \
-	CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc \
-	CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++
+RUN cargo build --bin crawler --release --target-dir /headlines/target/release
 
-RUN cargo build --bin crawler --release --target armv7-unknown-linux-gnueabihf
-
-FROM alpine:3.12
-
-COPY --from=build /headlines/target/armv7-unknown-linux-gnueabihf/release/crawler .
-
-CMD ["./crawler"]
+CMD ["/headlines/target/release/crawler"]
