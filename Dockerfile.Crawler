@@ -1,11 +1,11 @@
 FROM dlecan/rust-crosscompiler-arm:stable as build
 
-WORKDIR /headlines
+WORKDIR /source
 
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./src ./src
 
-RUN cargo build --bin crawler --release --target-dir /headlines/target/release
+RUN cargo build --bin crawler --release
 
-CMD ["/headlines/target/release/crawler"]
+CMD ["/source/target/arm-unknown-linux-gnueabihf/release/crawler"]
