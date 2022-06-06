@@ -649,6 +649,7 @@ dependencies = [
  "futures",
  "md5",
  "mongodb",
+ "openssl",
  "reqwest",
  "rocket",
  "rss",
@@ -1197,6 +1198,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28988d872ab76095a6e6ac88d99b54fd267702734fd7ffe610ca27f533ddb95a"
 
 [[package]]
+name = "openssl-src"
+version = "111.20.0+1.1.1o"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92892c4f87d56e376e469ace79f1128fdaded07646ddf73aa0be4706ff712dec"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1205,6 +1215,7 @@ dependencies = [
  "autocfg",
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -2129,9 +2140,9 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
-version = "1.10.1"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92036be488bb6594459f2e03b60e42df6f937fe6ca5c5ffdcb539c6b84dc40f5"
+checksum = "52963f91310c08d91cb7bff5786dfc8b79642ab839e188187e92105dbfb9d2c8"
 dependencies = [
  "autocfg",
  "bytes",
